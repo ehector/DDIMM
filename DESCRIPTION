@@ -4,7 +4,7 @@ Title: Doubly Distributed and Integrated Method of Moments
 Version: 1.0-1
 Date: 2020-06-03
 Author: Emily C. Hector
-Maintainer: [Emily C. Hector] <ehector@umich.edu>
+Maintainer: [Emily C. Hector] <ehector@ncsu.edu>
 Description: Performs regression analysis of high-dimensional correlated responses. Divides data into blocks according to supplied indicators, analyses blocks using composite likelihood or generalized estimating equations, and combines blocks using optimal generalized method of moments (GMM) equation.
 License: GPL-3
 Imports: Rcpp (>= 0.12.11),
