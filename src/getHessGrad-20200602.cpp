@@ -19,8 +19,10 @@ extern "C"{
 #include <utils.h>
 #include <geesubs.h>
 
-
 /*********************************************************/
+
+// This code is from the R package geepack, written by Højsgaard, S., Halekoh, U., Yan, J. (2006). 
+// "The R package geepack for generalized estimating equations". Journal of Statistical Software, 15(2):1–11.
 
 double linkfun_logit(double mu) {return log(mu/(1 - mu));}
 
