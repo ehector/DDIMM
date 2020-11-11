@@ -1,6 +1,6 @@
 # DDIMM
 
-This repository is an R package implementing methods in the following two publications:
+This repository is an R package implementing methods from the following two publications:
 - Emily C. Hector and Peter X.-K. Song (2020). A distributed and integrated method of moments for high-dimensional correlated data analysis. 
 Journal of the American Statistical Association, pages 1–14. doi: 10.1080/01621459.2020.1736082.
 - Emily C. Hector and Peter X.-K. Song (2020). Doubly distributed supervised learning and inference with high-dimensional correlated outcomes. 
