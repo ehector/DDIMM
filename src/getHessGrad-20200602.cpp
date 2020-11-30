@@ -19,83 +19,9 @@ extern "C"{
 #include <utils.h>
 #include <geesubs.h>
 
-// [[Rcpp::export]]
-Rcpp::List getHessGrads(SEXP y, SEXP x, SEXP offset, SEXP doffset, SEXP w,
-                       SEXP linkwave, SEXP zsca, SEXP zcor, SEXP corp,
-                       SEXP clusz, SEXP geestr, SEXP cor, SEXP par) {
-  DVector Y = asDVector(y), Offset = asDVector(offset), Doffset = asDVector(doffset), W = asDVector(w);
-  IVector LinkWave = asIVector(linkwave); 
-  DVector CorP = asDVector(corp); 
-  DMatrix X = asDMatrix(x), Zsca = asDMatrix(zsca), Zcor = asDMatrix(zcor);
-  IVector Clusz = asIVector(clusz); 
-  //Control Con = asControl(con);   
-  GeeParam Par = asGeeParam(par);   
-  GeeStr Geestr = asGeeStr(geestr);   
-  Corr Cor = asCorr(cor);   
-  IVector Scur(Y.size()); Scur = 1;
-  
-  IVector level(2); level = 0;
-  if (Geestr.ScaleFix() != 1) level(1) = 1;
-  if (Cor.nparam() > 0) level(2) = 1;
-  
-  int K = Clusz.size();
-  IVector Jack(K), ZcorSize(K);
-  if (Cor.corst() > AR1) // == UNSTRUCTRUED || USERDEFINED || FIXED
-    for (int i = 1; i <= K; i++) 
-      ZcorSize(i) = Clusz(i) * (Clusz(i) - 1) / 2;
-  else ZcorSize = 1;
-  
-  Hess Hi(Par), H(Par); Grad Gi(Par);
-  Rcpp::List ans(6 + 3*Clusz.size());
-
-  int pb = Par.p(), pa = Par.q(), pg = Par.r();
-  
-  //output
-  Index1D I(0,0), J(0,0);
-  int N = Clusz.size();
-  DVector V0(pb);
-  //cout << "N = " << N;
-  for (int i = 1; i <= N; i++) {
-    int s1 = Clusz(i), s2 = ZcorSize(i);
-    I = Index1D(1, s1) + I.ubound();
-    if (s2 > 0) J = Index1D(1, s2) + J.ubound();
-    
-    IVector Scuri = asVec(VecSubs(Scur, I));
-    if (sum(Scuri) == 0)  continue;
-    //get and valid data i
-    DVector Yi, Offseti, Doffseti, Wi, CorPi;
-    DMatrix Xi, Zscai, Zcori;
-    IVector LinkWavei;
-    
-    getDatI(Y, Offset, Doffset, W, CorP, X, Zsca, Zcor, LinkWave, 
-            I, J, Scuri, Cor, Yi, Offseti, Doffseti, Wi, CorPi, Xi, Zscai, Zcori, LinkWavei);
-    
-    DVector PRi(s1), Vi(s1), V_Mui(s1); DMatrix Di(s1,pb);
-    gee_prep(Yi, Xi, Offseti, LinkWavei, Par, Geestr, PRi, Di, Vi, V_Mui);
-    DVector Phii(s1); DMatrix D2i(s1, pg);
-    PhiandD2(LinkWavei, Doffseti, Zscai, Par, Geestr, Phii, D2i);
-    DMatrix R(s1, s1), E(s2, pa);
-    RandE(Zcori, CorPi, Par, Geestr, Cor, R, E);
-    
-    HiandGi(PRi, Phii, Di, R, Vi, V_Mui, D2i, E, Wi, level, Hi, Gi);
-    H.inc(Hi); 
-    ans(6 + 3*(i-1)) = Gi.U1();
-    ans(6 + 3*(i-1)+1) = Gi.U2();
-    ans(6 + 3*(i-1)+2) = Gi.U3();
-  }
-  
-  ans(0) = H.A();
-  ans(1) = H.B();
-  ans(2) = H.C();
-  ans(3) = H.D();
-  ans(4) = H.E();
-  ans(5) = H.F();
-  return ans;
-}
-
 /*********************************************************/
 
-// The following code was copied without modification from the R package geepack, written by Højsgaard, S., Halekoh, U., Yan, J. (2006). 
+// This code was copied without modification from the R package geepack, written by Højsgaard, S., Halekoh, U., Yan, J. (2006). 
 // "The R package geepack for generalized estimating equations". Journal of Statistical Software, 15(2):1–11.
 
 double linkfun_logit(double mu) {return log(mu/(1 - mu));}
@@ -450,8 +376,6 @@ bool GeeStr::validMu(const DVector &Mu, const IVector &Wave) {
   }
   return ans;
 }
-
-/*********************************************************/
 
 IVector comp_lev(GeeStr &geestr, Corr &cor) {
   IVector level(2);
@@ -946,8 +870,6 @@ extern "C" {
     return ans;
   }
 }
-
-/*********************************************************/
 
 Grad & Grad::operator=(const Grad &G) {
   U1_ = G.U1_; U2_ = G.U2_; U3_ = G.U3_;
@@ -1473,8 +1395,6 @@ IVector genCrossVI(IVector &Si, int c) {
   return ans;
 }
 
-/*********************************************************/
-
 DMatrix asDMatrix(SEXP a) {
   double *x;
   x = NUMERIC_POINTER(AS_NUMERIC(a));
@@ -1638,8 +1558,6 @@ SEXP asSEXP(GeeParam &Par) {
   return ans;
 }
 
-/*********************************************************/
-
 //class Control
 Control::Control(int trace, int ajs, int j1s, int fij, 
                  int maxiter, double tol) :
@@ -1688,8 +1606,6 @@ GeeParam::GeeParam(DVector Beta, DVector Alpha, DVector Gamma,
   _vgamma(VGamma),
   _vgamma_ajs(VGamma_ajs), _vgamma_j1s(VGamma_j1s),
   _vgamma_fij(VGamma_fij) {}
-
-/*********************************************************/
 
 void VecPrint(const DVector &v) {
   for (int i = 0; i < v.dim(); i++) Rprintf("%f ", v[i]);
@@ -1881,4 +1797,84 @@ DMatrix fabs(const DMatrix &m) {
 
 DVector fabs(const DVector &v) {
   return apply_elwise(v, fabs);
+}
+
+
+/*********************************************************/
+/*********************************************************/
+/*********************************************************/
+// This function was written for the DDIMM R package to retrieve gradients and Hessians from the geepack R package.
+
+// [[Rcpp::export]]
+Rcpp::List getHessGrads(SEXP y, SEXP x, SEXP offset, SEXP doffset, SEXP w,
+                       SEXP linkwave, SEXP zsca, SEXP zcor, SEXP corp,
+                       SEXP clusz, SEXP geestr, SEXP cor, SEXP par) {
+  DVector Y = asDVector(y), Offset = asDVector(offset), Doffset = asDVector(doffset), W = asDVector(w);
+  IVector LinkWave = asIVector(linkwave); 
+  DVector CorP = asDVector(corp); 
+  DMatrix X = asDMatrix(x), Zsca = asDMatrix(zsca), Zcor = asDMatrix(zcor);
+  IVector Clusz = asIVector(clusz); 
+  //Control Con = asControl(con);   
+  GeeParam Par = asGeeParam(par);   
+  GeeStr Geestr = asGeeStr(geestr);   
+  Corr Cor = asCorr(cor);   
+  IVector Scur(Y.size()); Scur = 1;
+  
+  IVector level(2); level = 0;
+  if (Geestr.ScaleFix() != 1) level(1) = 1;
+  if (Cor.nparam() > 0) level(2) = 1;
+  
+  int K = Clusz.size();
+  IVector Jack(K), ZcorSize(K);
+  if (Cor.corst() > AR1) // == UNSTRUCTRUED || USERDEFINED || FIXED
+    for (int i = 1; i <= K; i++) 
+      ZcorSize(i) = Clusz(i) * (Clusz(i) - 1) / 2;
+  else ZcorSize = 1;
+  
+  Hess Hi(Par), H(Par); Grad Gi(Par);
+  Rcpp::List ans(6 + 3*Clusz.size());
+
+  int pb = Par.p(), pa = Par.q(), pg = Par.r();
+  
+  //output
+  Index1D I(0,0), J(0,0);
+  int N = Clusz.size();
+  DVector V0(pb);
+  //cout << "N = " << N;
+  for (int i = 1; i <= N; i++) {
+    int s1 = Clusz(i), s2 = ZcorSize(i);
+    I = Index1D(1, s1) + I.ubound();
+    if (s2 > 0) J = Index1D(1, s2) + J.ubound();
+    
+    IVector Scuri = asVec(VecSubs(Scur, I));
+    if (sum(Scuri) == 0)  continue;
+    //get and valid data i
+    DVector Yi, Offseti, Doffseti, Wi, CorPi;
+    DMatrix Xi, Zscai, Zcori;
+    IVector LinkWavei;
+    
+    getDatI(Y, Offset, Doffset, W, CorP, X, Zsca, Zcor, LinkWave, 
+            I, J, Scuri, Cor, Yi, Offseti, Doffseti, Wi, CorPi, Xi, Zscai, Zcori, LinkWavei);
+    
+    DVector PRi(s1), Vi(s1), V_Mui(s1); DMatrix Di(s1,pb);
+    gee_prep(Yi, Xi, Offseti, LinkWavei, Par, Geestr, PRi, Di, Vi, V_Mui);
+    DVector Phii(s1); DMatrix D2i(s1, pg);
+    PhiandD2(LinkWavei, Doffseti, Zscai, Par, Geestr, Phii, D2i);
+    DMatrix R(s1, s1), E(s2, pa);
+    RandE(Zcori, CorPi, Par, Geestr, Cor, R, E);
+    
+    HiandGi(PRi, Phii, Di, R, Vi, V_Mui, D2i, E, Wi, level, Hi, Gi);
+    H.inc(Hi); 
+    ans(6 + 3*(i-1)) = Gi.U1();
+    ans(6 + 3*(i-1)+1) = Gi.U2();
+    ans(6 + 3*(i-1)+2) = Gi.U3();
+  }
+  
+  ans(0) = H.A();
+  ans(1) = H.B();
+  ans(2) = H.C();
+  ans(3) = H.D();
+  ans(4) = H.E();
+  ans(5) = H.F();
+  return ans;
 }
