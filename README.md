@@ -10,7 +10,7 @@ Briefly, the method performs regression analysis of high-dimensional correlated 
 analyses blocks using composite likelihood or generalized estimating equations (GEE), and combines blocks using a meta-estimator asymptotically equivalent to 
 the optimal generalized method of moments (GMM) equation.
 
-Any questions or bug-reports should be mailed to ehector@ncsu.edu.
+Please email ehector@ncsu.edu with any questions or bug-reports.
 
 # Installation
 
