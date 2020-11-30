@@ -493,96 +493,6 @@ estimation.deriv2.mean <- function(par, d, W, response, covariates, J, K, N, div
     t(psi.g.deriv.mean(par, d, response, covariates, J, K, N, funcderiv))/div
 }
 
-ridge.estimate.mean <- function(psi_list, MCLE, MCLE_mean, response, covariates, J, K, N, funcderiv, folds, lam){
-  S <- list()
-  W <- list()
-  lam_list <- vector("numeric", K)
-  scale <- matrix(0, dim(covariates)[2]-1, dim(covariates)[2]-1)
-  main <- matrix(0, dim(covariates)[2]-1, 1)
-  for (k in 1:K){
-    S[[k]] <- list()
-    for (j in 1:J){
-      block_y <- matrix(response[response[,(colnames(response)=="response_indicator")]==j, which(colnames(response)==k)], 
-                        nrow=sum(response[,(colnames(response)=="response_indicator")]==j))
-      ids_block_x <- covariates[covariates[,"id"] %in% unique(covariates[,"id"])[colnames(response)==k],]
-      block_x <- as.matrix(ids_block_x[rep(response[,which(colnames(response)=="response_indicator")], 
-                                           length(unique(ids_block_x[,"id"])))==j,
-                                       -which(colnames(ids_block_x)=="id")])
-      
-      m <- dim(block_y)[1]
-      n <- dim(block_y)[2]
-      S[[k]][[j]] <- Reduce("+", funcderiv(matrix(MCLE[[k]][[j]],m,m), 
-                                           block_y=block_y, block_x=block_x, 
-                                           m=m, n=n))/n
-    }
-    S_k <- do.call(cbind, S[[k]])
-    if (length(lam) != 1){
-      CV <- vector("numeric", length(lam))
-      for(f in 1:length(lam))
-        CV[f] <- modified.cholesky.cv(psi_list[[k]], J, dim(covariates)[2]-1, N, lam[f], folds)
-      lam_list[k] <- lam[which.min(CV)] 
-    } else {
-      lam_list[k] <- lam
-    }
-    W[[k]] <- modified.cholesky(psi_list[[k]], J, dim(covariates)[2]-1, N, lam_list[k])
-    for(j in 1:J){
-      scale <- scale + n*S_k %*% W[[k]][,((j-1)*(dim(covariates)[2]-1)+1):(j*(dim(covariates)[2]-1))] %*% S[[k]][[j]]
-      main <- main + n*S_k %*% W[[k]][,((j-1)*(dim(covariates)[2]-1)+1):(j*(dim(covariates)[2]-1))] %*% S[[k]][[j]] %*%
-        MCLE_mean[[k]][[j]]
-    }
-  }
-  return(list(coefficients=solve(scale)%*%main, 
-              W=as.matrix(Matrix::bdiag(lapply(W, function(x) matrix(unlist(x), ncol=J*(dim(covariates)[2]-1), byrow=TRUE)))), 
-              lam=lam_list))
-}
-
-modified.cholesky <- function(psi_list, J, p, N, lam){
-  psi_mat <- c()
-  D <- matrix(0, p*J, p*J)
-  Gamma <- matrix(0, p*J, p*J)
-  diag(Gamma) <- 1
-  for(j in 1:J){
-    psi_mat <- rbind(psi_mat, matrix(unlist(psi_list[[j]]), p, N))
-  }
-  psi_mat <- t(psi_mat)
-  for(r in 2:dim(psi_mat)[2]){
-    ridge <- MASS::lm.ridge(psi_mat[,r] ~ 0 + psi_mat[,1:(r-1)], lambda=lam)
-    Gamma[r, 1:(r-1)] <- -as.matrix(ridge$coef)
-    D[r,r] <- var(psi_mat[,r] - psi_mat[,1:(r-1)]%*%as.matrix(ridge$coef))
-  }
-  D[1,1] <- var(psi_mat[,1])
-  return((t(Gamma)%*%solve(D)%*%Gamma))
-}
-
-modified.cholesky.cv <- function(psi_list, J, p, N, lam, folds){
-  psi_mat <- c()
-  for(j in 1:J){
-    psi_mat <- rbind(psi_mat, matrix(unlist(psi_list[[j]]), p, N))
-  }
-  psi_mat <- t(psi_mat)
-  s_v <- c()
-  CV <- vector("numeric", folds)
-  for(f in 1:folds){
-    set.seed(f)
-    indices <- sample(setdiff(seq(1:dim(psi_mat)[1]), s_v), floor(dim(psi_mat)[1]/folds), replace=FALSE)
-    s_v <- c(s_v, indices)
-    psi_mat_sub <- psi_mat[setdiff(seq(1:dim(psi_mat)[1]), indices),]
-    D <- matrix(0, p*J, p*J)
-    Gamma <- matrix(0, p*J, p*J)
-    diag(Gamma) <- 1
-    for(r in 2:dim(psi_mat_sub)[2]){
-      ridge <- MASS::lm.ridge(psi_mat_sub[,r] ~ 0 + psi_mat_sub[,1:(r-1)], lambda=lam)
-      Gamma[r, 1:(r-1)] <- -as.matrix(ridge$coef)
-      D[r,r] <- var(psi_mat_sub[,r] - psi_mat_sub[,1:(r-1)]%*%as.matrix(ridge$coef))
-    }
-    D[1,1] <- var(psi_mat_sub[,1])
-    W <- (t(Gamma)%*%solve(D)%*%Gamma)
-    V <- cov(psi_mat_sub)
-    CV[f] <- length(indices)*log(det(V)) + sum(apply(psi_mat[indices,],1,function(x) t(x) %*% W %*% x))
-  }
-  return(sum(CV, na.rm=T)/folds)
-}
-
 dimm <- function(formula, data, id=id, response_indicator=NULL, subject_indicator=NULL, family, corstr, method=NULL, analysis=NULL,
                   lam=NULL, folds=NULL, cluster=NULL, ...){
   cl <- match.call()
@@ -1007,7 +917,7 @@ dimm.compute.mean <- function(response, covariates, response_indicator, subject_
       block_x <- as.matrix(block_x[, -which(colnames(block_x)=="id")])
       m <- dim(block_y)[1]
       n <- dim(block_y)[2]
-      #init_betas <- rep(1, p)
+
       init_betas <- coef(glm(c(block_y) ~ 0 + block_x, family=family))
       
       if (corstr == "CS") {
@@ -1251,95 +1161,6 @@ dimm.compute.mean <- function(response, covariates, response_indicator, subject_
     output$vcov <- solve(scale)[1:p,1:p]*N
     output$full.coefficients <- as.vector(solve(scale)%*%main)
   } 
-  
-  if (method=="iterative" | method=="ridge"){
-    if(method=="iterative"){
-      div <- choose(N,2)
-      init_pars <- c(colMeans(do.call(rbind, lapply(MCLE_mean, function(x) do.call(rbind, lapply(x, function(y) y[1:p]))))), 
-                     unlist(lapply(MCLE_mean, function(x) lapply(x, function(y) y[(p+1):(p+d)]))))
-      optimization <- optim(par=init_pars, 
-                            combined.estimation.mean, gr=estimation.deriv.mean, 
-                            d=d, W=output$W, response=response, 
-                            covariates=covariates, J=J, K=K, N=N, div=div, func=func4, funcderiv=func5, 
-                            method="L-BFGS-B", lower=lower_lim, upper=upper_lim, control=list(maxit=500))
-      init_pars <- optimization$par
-      output$coefficients <- optim(par=init_pars, 
-                                   combined.estimation.mean, gr=estimation.deriv.mean, 
-                                   d=d, W=output$W, response=response, 
-                                   covariates=covariates, J=J, K=K, N=N, div=div, func=func4, funcderiv=func5, 
-                                   method="L-BFGS-B", lower=lower_lim, upper=upper_lim)$par
-    }
-    ##if (method=="ridge"){
-    ##  if (is.null(folds)) 
-    ##    folds <- 1
-    ##  if (is.null(lam))
-    ##    lam <- 0
-    ##  ridge_optim <- ridge.estimate.mean(psi_list, MCLE, MCLE_mean, response, covariates, J, K, N, funcderiv=func3, folds, lam)
-    ##  output$coefficients <- as.vector(ridge_optim$coefficients)
-    ##  output$W <- ridge_optim$W
-    ##  output$lam <- ridge_optim$lam
-    ##} 
-    
-    sensitivity_psi <- matrix(0, J*K*d+p, J*K*(p+d))
-    phi_gh <- matrix(0, N, J*K*(p+d))
-    for(k in 1:K) {
-      for (j in 1:J) {
-        block_y <- matrix(response[response[,(colnames(response)=="response_indicator")]==j, which(colnames(response)==k)], 
-                          nrow=sum(response[,(colnames(response)=="response_indicator")]==j))
-        ids_block_x <- covariates[covariates[,"id"] %in% unique(covariates[,"id"])[subject_indicator==k],]
-        block_x <- as.matrix(ids_block_x[rep(response_indicator, length(unique(ids_block_x[,"id"])))==j,
-                                         -which(colnames(ids_block_x)=="id")])
-        m <- dim(block_y)[1]
-        n <- dim(block_y)[2]
-        if(d==2){
-          phi_gh_combined <- func4(output$coefficients[1:p], output$coefficients[p+(j-1+(k-1)*J)*d+1], output$coefficients[p+(j-1+(k-1)*J)*d+2], 
-                                  block_y=block_y, block_x=block_x, id=id, m=m, n=n) 
-          
-          phi_gh[min(which(subject_indicator==k)):max(which(subject_indicator==k)),
-                ((j-1+(k-1)*J)*(p)+1):((j-1+(k-1)*J)*(p)+p)] <- 
-            t(sapply(phi_gh_combined, function(x) as.matrix(x[1:p])))
-          phi_gh[min(which(subject_indicator==k)):max(which(subject_indicator==k)),
-                (J*K*p+(j-1+(k-1)*J)*d+1):(J*K*p+(j-1+(k-1)*J)*d+d)] <- 
-            t(sapply(phi_gh_combined, function(x) as.matrix(x[c(p+1, p+2)])))
-          
-          little_s <- t(func5(output$coefficients[1:p], output$coefficients[p+(j-1+(k-1)*J)*d+1], 
-                              output$coefficients[p+(j-1+(k-1)*J)*d+2], block_y, block_x, id, m, n)*n/N)
-        }
-        if(d==1){
-          phi_gh_combined <- func4(output$coefficients[1:p], output$coefficients[p+(j-1+(k-1)*J)*d+1], 
-                                   block_y=block_y, block_x=block_x, id=id, m=m, n=n) 
-          
-          phi_gh[min(which(subject_indicator==k)):max(which(subject_indicator==k)),
-                 ((j-1+(k-1)*J)*(p)+1):((j-1+(k-1)*J)*(p)+p)] <- 
-            t(sapply(phi_gh_combined, function(x) as.matrix(x[1:p])))
-          phi_gh[min(which(subject_indicator==k)):max(which(subject_indicator==k)),
-                 (J*K*p+(j-1+(k-1)*J)*d+1):(J*K*p+(j-1+(k-1)*J)*d+d)] <- 
-            t(sapply(phi_gh_combined, function(x) as.matrix(x[p+1])))
-          
-          little_s <- t(func5(output$coefficients[1:p], output$coefficients[p+(j-1+(k-1)*J)*d+1], 
-                                           block_y, block_x, id, m, n)*n/N)
-        }
-        sensitivity_psi[1:p,((j-1+(k-1)*J)*(p)+1):((j-1+(k-1)*J)*(p)+p)] <- little_s[1:p,1:p]
-        sensitivity_psi[1:p,(J*K*p+(j-1+(k-1)*J)*d+1):(J*K*p+(j-1+(k-1)*J)*d+d)] <- little_s[1:p,(p+1):(p+d)]
-        sensitivity_psi[((j-1+(k-1)*J)*d+p+1):((j-1+(k-1)*J)*d+p+d),((j-1+(k-1)*J)*(p)+1):((j-1+(k-1)*J)*(p)+p)] <- little_s[(p+1):(p+d),1:p]
-        sensitivity_psi[((j-1+(k-1)*J)*d+p+1):((j-1+(k-1)*J)*d+p+d),(J*K*p+(j-1+(k-1)*J)*d+1):(J*K*p+(j-1+(k-1)*J)*d+d)] <- little_s[(p+1):(p+d),(p+1):(p+d)]
-      }
-    }
-    variability_psi <- matrix(0, J*K*(p+d), J*K*(p+d))
-    for(i in 1:dim(phi_gh)[1]){
-      variability_psi <- variability_psi + phi_gh[i,]%o%phi_gh[i,]
-    }
-    variability_psi <- variability_psi/N
-    
-    output$vcov <- solve(sensitivity_psi%*%output$W%*%t(sensitivity_psi))%*%
-      sensitivity_psi%*%output$W%*%variability_psi%*%output$W%*%t(sensitivity_psi)%*%
-      solve(sensitivity_psi%*%output$W%*%t(sensitivity_psi))/N
-    
-    full_coefficients <- output$coefficients
-    output$coefficients <- output$coefficients[1:p]
-    output$vcov <- output$vcov[1:p,1:p]
-    output$full.coefficients <- full_coefficients
-  }
   time2 <- proc.time()-time2
   output$family <- family
   output$analysis <- analysis
@@ -1961,94 +1782,7 @@ dimm.compute.mean.parallel <- function(response, covariates, response_indicator,
     output$vcov <- solve(scale)[1:p,1:p]*N
     output$full.coefficients <- as.vector(solve(scale)%*%main)
   } 
-
-  if (method=="iterative" | method=="ridge"){
-    if (method=="iterative"){
-      div <- choose(N,2)
-      init_pars <- c(colMeans(do.call(rbind, lapply(MCLE_mean, function(x) do.call(rbind, lapply(x, function(y) y[1:p]))))), 
-                     unlist(lapply(MCLE_mean, function(x) lapply(x, function(y) y[(p+1):(p+d)]))))
-      optimization <- optim(par=init_pars, 
-                            combined.estimation.mean, gr=estimation.deriv.mean, 
-                            d=d, W=output$W, response=response, 
-                            covariates=covariates, J=J, K=K, N=N, div=div, func=func4, funcderiv=func5, 
-                            method="L-BFGS-B", lower=lower_lim, upper=upper_lim, control=list(maxit=500))
-      init_pars <- optimization$par
-      output$coefficients <- optim(par=init_pars, 
-                                   combined.estimation.mean, gr=estimation.deriv.mean, 
-                                   d=d, W=output$W, response=response, 
-                                   covariates=covariates, J=J, K=K, N=N, div=div, func=func4, funcderiv=func5, 
-                                   method="L-BFGS-B", lower=lower_lim, upper=upper_lim)$par
-    } 
-    ##if (method=="ridge"){
-    ##  if (is.null(folds)) 
-    ##    folds <- 1
-    ##  if (is.null(lam))
-    ##    lam <- 0
-    ##  ridge_optim <- ridge.estimate.mean(psi_list, MCLE, MCLE_mean, response, covariates, J, K, N, funcderiv=func3, folds, lam)
-    ##  output$coefficients <- as.vector(ridge_optim$coefficients)
-    ##  output$W <- ridge_optim$W
-    ##  output$lam <- ridge_optim$lam
-    ##} 
-    
-    sensitivity_psi <- matrix(0, J*K*d+p, J*K*(p+d))
-    phi_gh <- matrix(0, N, J*K*(p+d))
-    for(k in 1:K) {
-      for (j in 1:J) {
-        block_y <- matrix(response[response[,(colnames(response)=="response_indicator")]==j, which(colnames(response)==k)], 
-                          nrow=sum(response[,(colnames(response)=="response_indicator")]==j))
-        ids_block_x <- covariates[covariates[,"id"] %in% unique(covariates[,"id"])[subject_indicator==k],]
-        block_x <- as.matrix(ids_block_x[rep(response_indicator, length(unique(ids_block_x[,"id"])))==j,
-                                         -which(colnames(ids_block_x)=="id")])
-        m <- dim(block_y)[1]
-        n <- dim(block_y)[2]
-        if(d==2){
-          phi_gh_combined <- func4(output$coefficients[1:p], output$coefficients[p+(j-1+(k-1)*J)*d+1], output$coefficients[p+(j-1+(k-1)*J)*d+2], 
-                                   block_y=block_y, block_x=block_x, id=id, m=m, n=n) 
-          
-          phi_gh[min(which(subject_indicator==k)):max(which(subject_indicator==k)),
-                 ((j-1+(k-1)*J)*(p)+1):((j-1+(k-1)*J)*(p)+p)] <- 
-            t(sapply(phi_gh_combined, function(x) as.matrix(x[1:p])))
-          phi_gh[min(which(subject_indicator==k)):max(which(subject_indicator==k)),
-                 (J*K*p+(j-1+(k-1)*J)*d+1):(J*K*p+(j-1+(k-1)*J)*d+d)] <- 
-            t(sapply(phi_gh_combined, function(x) as.matrix(x[c(p+1, p+2)])))
-          
-          little_s <- t(func5(output$coefficients[1:p], output$coefficients[p+(j-1+(k-1)*J)*d+1], 
-                              output$coefficients[p+(j-1+(k-1)*J)*d+2], block_y, block_x, id, m, n)*n/N)
-        }
-        if(d==1){
-          phi_gh_combined <- func4(output$coefficients[1:p], output$coefficients[p+(j-1+(k-1)*J)*d+1], 
-                                   block_y=block_y, block_x=block_x, id=id, m=m, n=n) 
-          
-          phi_gh[min(which(subject_indicator==k)):max(which(subject_indicator==k)),
-                 ((j-1+(k-1)*J)*(p)+1):((j-1+(k-1)*J)*(p)+p)] <- 
-            t(sapply(phi_gh_combined, function(x) as.matrix(x[1:p])))
-          phi_gh[min(which(subject_indicator==k)):max(which(subject_indicator==k)),
-                 (J*K*p+(j-1+(k-1)*J)*d+1):(J*K*p+(j-1+(k-1)*J)*d+d)] <- 
-            t(sapply(phi_gh_combined, function(x) as.matrix(x[p+1])))
-          
-          little_s <- t(func5(output$coefficients[1:p], output$coefficients[p+(j-1+(k-1)*J)*d+1], 
-                              block_y, block_x, id, m, n)*n/N)
-        }
-        sensitivity_psi[1:p,((j-1+(k-1)*J)*(p)+1):((j-1+(k-1)*J)*(p)+p)] <- little_s[1:p,1:p]
-        sensitivity_psi[1:p,(J*K*p+(j-1+(k-1)*J)*d+1):(J*K*p+(j-1+(k-1)*J)*d+d)] <- little_s[1:p,(p+1):(p+d)]
-        sensitivity_psi[((j-1+(k-1)*J)*d+p+1):((j-1+(k-1)*J)*d+p+d),((j-1+(k-1)*J)*(p)+1):((j-1+(k-1)*J)*(p)+p)] <- little_s[(p+1):(p+d),1:p]
-        sensitivity_psi[((j-1+(k-1)*J)*d+p+1):((j-1+(k-1)*J)*d+p+d),(J*K*p+(j-1+(k-1)*J)*d+1):(J*K*p+(j-1+(k-1)*J)*d+d)] <- little_s[(p+1):(p+d),(p+1):(p+d)]
-      }
-    }
-    variability_psi <- matrix(0, J*K*(p+d), J*K*(p+d))
-    for(i in 1:dim(phi_gh)[1]){
-      variability_psi <- variability_psi + phi_gh[i,]%o%phi_gh[i,]
-    }
-    variability_psi <- variability_psi/N
-    
-    output$vcov <- solve(sensitivity_psi%*%output$W%*%t(sensitivity_psi))%*%
-      sensitivity_psi%*%output$W%*%variability_psi%*%output$W%*%t(sensitivity_psi)%*%
-      solve(sensitivity_psi%*%output$W%*%t(sensitivity_psi))/N
-    full_coefficients <- output$coefficients
-    output$coefficients <- output$coefficients[1:p]
-    output$vcov <- output$vcov[1:p,1:p]
-    output$full.coefficients <- full_coefficients
-  }
+                             
   time2 <- proc.time()-time2
   parallel::stopCluster(sock)
   print("Cluster stopped.", quote=FALSE)
