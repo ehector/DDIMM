@@ -14,7 +14,11 @@ Any questions or bug-reports should be mailed to ehector@ncsu.edu.
 
 # Installation
 
-The DDIMM R package can be installed from the downloaded gzipped tarball as R CMD INSTALL DDIMM_1.0.tar.gz. Please make sure to have all packages listed in the DESCRIPTION file already installed.
+The DDIMM R package can be installed in one of two ways:
+- from the downloaded gzipped tarball as R CMD INSTALL DDIMM_1.0-1.tar.gz
+- from the downloaded and renamed DDIMM folder as R CMD build DDIMM and R CMD INSTALL DDIMM_1.0-1.tar.gz
+
+Please make sure to have all packages listed in the DESCRIPTION file already installed.
 
 # Citation
 
