@@ -18,9 +18,10 @@ The DDIMM R package can be installed from the downloaded gzipped tarball as R CM
 
 # Citation
 
-If you use the DDIMM R package, please consider citing the relevant manuscript Hector & Song (2020a) or Hector & Song (2020b).
+If you use the DDIMM R package, please consider citing the relevant manuscript: Hector & Song (2020a) or Hector & Song (2020b).
 
 # References
 
 The posdef.matrix function was written by Ravi Varadhan: https://stat.ethz.ch/pipermail/r-help/2008-February/153708.
+
 The GEE implementation is through the R package geepack: Højsgaard, S., Halekoh, U., Yan, J. (2006). The R package geepack for generalized estimating equations. Journal of Statistical Software, 15(2):1–11.
